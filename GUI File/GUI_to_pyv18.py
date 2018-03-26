@@ -5,7 +5,7 @@
 # Created by: PyQt5 UI code generator 5.9.2
 #
 '''
-@Author Alex Schnorr
+@Author Alex Schnorr and Kevin Scott
 
 3/1/18
 
