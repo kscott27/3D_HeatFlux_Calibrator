@@ -55,14 +55,14 @@ task_user::task_user (const char* a_name,
 					  size_t a_stack_size,
 					  emstream* p_ser_dev
 					 )
-	: frt_task (a_name, a_priority, a_stack_size, p_ser_dev)
+	: frt_task (a_name, a_priority, a_stack_size, p_ser_dev), task_name(a_name)
 {
 	atoi_index = 0;
 }
 
-uint16_t task_user::str_to_int(void)
+uint32_t task_user::str_to_int(void)
 {
-	uint16_t conv_int = 0;
+	uint32_t conv_int = 0;
 	for(uint8_t i=0; i < atoi_index-1; i++)
 	{
 		conv_int = conv_int * 10;
@@ -128,9 +128,8 @@ void task_user::reset_device(void)
 
 
 //-------------------------------------------------------------------------------------
-/** This task interacts with the user for force him/her to do what he/she is told. It
- *  is just following the modern government model of "This is the land of the free...
- *  free to do exactly what you're told." 
+/** This task interacts with the user by transmitting and receiving bytes over USB to 
+ *  and from a computer.
  */
 
 void task_user::run (void)
@@ -138,6 +137,7 @@ void task_user::run (void)
 	char char_in;							// Character read from serial device                         
 	time_stamp a_time;                      // Holds the time so it can be displayed
     portTickType previous_ticks;
+	uint16_t state_delay_counter = 0;
 
 	//print_main_menu();
 
@@ -145,11 +145,24 @@ void task_user::run (void)
 	// such loop inside the code for each task
 	for (;;)
 	{
+		//if (++state_delay_counter == 150)
+		//{
+			//*p_serial << task_name << state << endl;
+			//state_delay_counter = 0;
+		//}
+		
+		//if (reset.get())
+		//{
+			//*p_serial << PMS ("interrupt reset") << endl;
+			//reset_device();
+		//}
+		
 		// Run the finite state machine. The variable 'state' is kept by the parent class
 		switch (state)
 		{
 			// In Case 0, the interface is in the main menu.
 			case (0):
+			
 				if (p_serial->check_for_char ())        // If the user typed a
 				{                                       // character, read
 					char_in = p_serial->getchar ();     // the character
@@ -161,14 +174,31 @@ void task_user::run (void)
 						
 							//print_config_mode_menu();
 							configuration_mode.put(true);
-							transition_to(4);
+							*p_serial << PMS ("Entering config mode") << endl;
+							transition_to(3);
+							break;
+							
+						//case('e'):
+							//drawing_mode.put(true);
+							//transition_to(1);
+							
+						case('i'):
+							if (!(incremental_mode.get()))
+							{
+								incremental_mode.put(true);
+								transition_to(1);
+							}
+							
 							break;
 							
 						case('c'):
 						
-							//print_coord_mode_menu();
-							coordinate_mode.put(true);
-							transition_to(1);
+							if (!(coordinate_mode.get()))
+							{
+								coordinate_mode.put(true);
+								transition_to(1);
+							}
+							
 							break;
 						
 						case('d'):
@@ -180,10 +210,27 @@ void task_user::run (void)
 							
 						case('r'):
 							
+							*p_serial << PMS ("r reset") << endl;
 							reset_device();
-							transition_to(3);
 							break;
+							
+						case('s'):
 						
+							sensor_reading.put(true);
+							break;
+							
+						case('p'):
+							
+							if(!(pause.get()))
+							{
+								pause.put(true);
+							}
+							else
+							{
+								pause.put(false);
+							}
+							break;
+							
 					}
 				}
 			
@@ -200,9 +247,25 @@ void task_user::run (void)
 					atoi_index++;
 					switch (char_in)
 					{
+						case('r'):
+						
+							reset_device();
+							break;
+						
 						case ('e'):
 						//print_main_menu();
-						coordinate_mode.put(false);
+						//coordinate_mode.put(false);
+						if (xlocations.num_items_in() == ylocations.num_items_in() && xlocations.num_items_in() == zlocations.num_items_in())
+						{
+							total_nodes.put(xlocations.num_items_in());
+							*p_serial << PMS ("Total nodes: ") << total_nodes.get() << endl;
+							next_node.put(true);
+						}
+						else
+						{
+							*p_serial << PMS ("Error: Unequal axis coordinate vectors.") << endl;
+						}
+						atoi_index = 0;
 						transition_to(0);
 						break;
 						
@@ -211,35 +274,30 @@ void task_user::run (void)
 						conv_int = str_to_int();
 						location_queue->put(conv_int);
 						atoi_index = 0;
-						*p_serial << endl << PMS ("Locations entered into memory location: ") << location_queue << endl;
+						//*p_serial << endl << PMS ("Locations stored in memory location: ") << location_queue << endl;
 						break;
 						
 						case ('x'):
 						atoi_index = 0;
-						//*p_serial << endl << PMS ("Transmitting X-locations.") << endl;
+						*p_serial << endl << PMS ("Receiving X-locations.") << endl;
 						location_queue = &xlocations;
 						break;
 						
 						case ('y'):
 						atoi_index = 0;
-						//*p_serial << endl << PMS ("Transmitting Y-locations.") << endl;
+						*p_serial << endl << PMS ("Receiving Y-locations.") << endl;
 						location_queue = &ylocations;
 						break;
 						
 						case ('z'):
 						atoi_index = 0;
-						//*p_serial << endl << PMS ("Transmitting Z-locations.") << endl;
+						*p_serial << endl << PMS ("Receiving Z-locations.") << endl;
 						location_queue = &zlocations;
 						break;
 						
 						case ('g'):
 						initialization_complete.put(true);
 						*p_serial << endl;
-						break;
-						
-						case ('s'):
-						*p_serial << endl << PMS ("Enter the number of seconds the sensor will be alotted in each node:") << endl;
-						sensor_delay.put(3000);
 						break;
 						
 						case (','):
@@ -351,6 +409,7 @@ void task_user::run (void)
 							//*p_serial << PMS ("Press Ctrl-B for Coordinate Mode") << endl;
 							//*p_serial << PMS ("Press Ctrl-D for Direct Operation Mode") << endl;
 							//*p_serial << PMS ("Press Ctrl-R for Routine Operation Mode") << endl;
+						
 							direct_mode.put(false);
 							transition_to(0);
 							break;
@@ -402,9 +461,11 @@ void task_user::run (void)
                 break;
 			
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-							
+			/** In State 3, the interface task is in configuration mode. In this mode, it has the ability to change the
+			 *	default values of certain system parameters.
+			 */			
 				
-			case (4):
+			case (3):
 				if (p_serial->check_for_char ())        // If the user typed a
 				{                                       // character, read
 					char_in = p_serial->getchar ();     // the character
@@ -412,38 +473,95 @@ void task_user::run (void)
 					atoi_index++;
 					switch (char_in)
 					{
-						case (3):
-							*p_serial << PMS ("Resetting AVR") << endl;
-							wdt_enable (WDTO_120MS);
-							for (;;);
+						//case ('r'):
+							//*p_serial << PMS ("Set the ramp run span below:") << endl;
+							//atoi_index = 0;
+							//data_config = &ramp_run_span;
+							//break;
+							
+						case ('v'):
+							*p_serial << PMS ("Max velocity set to:") << endl;
+							atoi_index = 0;
+							data_config = &gen_max_v;
+							break;
+							
+						case ('x'):
+							*p_serial << PMS ("X-axis max velocity set to:") << endl;
+							atoi_index = 0;
+							v_config = &x_max_velocity;
+							queue_indicator = true;
+							break;
+							
+						case ('y'):
+							*p_serial << PMS ("Y-axis max velocity set to:") << endl;
+							atoi_index = 0;
+							v_config = &y_max_velocity;
+							queue_indicator = true;
 							break;
 						
-						case (5):
-							*p_serial << endl << PMS ("Press Ctrl-A for Configuration Mode") << endl;
-							*p_serial << PMS ("Press Ctrl-B for Coordinate Mode") << endl;
-							*p_serial << PMS ("Press Ctrl-D for Direct Operation Mode") << endl;
-							*p_serial << PMS ("Press Ctrl-R for Routine Operation Mode") << endl;
+						case ('z'):
+							*p_serial << PMS ("Z-axis max velocity set to:") << endl;
+							atoi_index = 0;
+							v_config = &z_max_velocity;
+							queue_indicator = true;
+							break;
+						
+						case ('e'):
+							*p_serial << PMS ("Leaving config mode") << endl;
 							configuration_mode.put(false);
 							transition_to(0);
 							break;
 							
-						case(13):
+						case('a'):
 							conv_int = str_to_int();
-							data_config->put(conv_int);
+							if (queue_indicator)
+							{
+								conv_int = 1000 * conv_int;
+								v_config->put(conv_int);
+								queue_indicator = false;
+							}
+							else
+							{
+								if (data_config == &ramp_run_span)
+								{
+									conv_int = 100 / conv_int;
+								}
+								else if (data_config == &gen_max_v)
+								{
+									conv_int = 1500 * conv_int;
+								}
+								data_config->put(conv_int);
+							}
+									
 							atoi_index = 0;
-							*p_serial << endl;
+							*p_serial << PMS ("Config entered:") << conv_int << endl;
 							break;
 							
-						case (21):
-							*p_serial << PMS ("If you would like to change the microstep scaler from the current setting of ") << microstep_scaler.get() << PMS (", please enter it below:") << endl;
+						case (','):
+							*p_serial << char_in;
+							
+							conv_int = str_to_int();
+							conv_int = conv_int * 1000;
+							v_config->put(conv_int);
+							atoi_index = 0;
+							break;
+							
+						case ('u'):
+							*p_serial << PMS ("Microstep scaler set to:") << endl;
+							atoi_index = 0;
+							data_config = &microstep_scaler;
+							break;
+							
+						case ('s'):
+							*p_serial << PMS ("Sensor delay set to:") << endl;
 							atoi_index = 0;
 							data_config = &sensor_delay;
 							break;
 							
-						case (19):
-							*p_serial << PMS ("If you would like to change the sensor delay from the current setting of ") << sensor_delay.get() << PMS (" ms, please enter it below in ms:") << endl;
+						case ('n'):
+							*p_serial << PMS ("Sensor sample size set to:") << endl;
 							atoi_index = 0;
-							data_config = &sensor_delay;
+							data_config = &sensor_sample_number;
 							break;
 							
 						case('0'):
@@ -498,99 +616,6 @@ void task_user::run (void)
 					}
 				}
 				break;
-							
-
-            // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-			// In state 0, we transparently relay characters from the radio to the USB 
-			// serial port and vice versa but watch for certain control characters
-			//case (1):
-				//if (p_serial->check_for_char ())        // If the user typed a
-				//{                                       // character, read
-					//char_in = p_serial->getchar ();     // the character
-//
-					//// In this switch statement, we respond to different characters
-					//switch (char_in)
-					//{
-						//// Control-C means reset the AVR computer
-						//case (3):
-							//*p_serial << PMS ("Resetting AVR") << endl;
-							//wdt_enable (WDTO_120MS);
-							//for (;;);
-							//break;
-//
-						//// Control-A puts this task in command mode
-						//case (1):
-							//print_help_message ();
-							//transition_to (1);
-							//break;
-//
-						//// Any other character will be ignored
-						//default:
-							//break;
-					//};
-				//}
-//
-				//// Check the print queue to see if another task has sent this task 
-				//// something to be printed
-				//else if (print_ser_queue.check_for_char ())
-				//{
-					//p_serial->putchar (print_ser_queue.getchar ());
-				//}
-//
-				//break; // End of state 0
-//
-			//// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-			//// In state 1, we're in command mode, so when the user types characters, the
-			//// characters are interpreted as commands to do something
-			//case (2):
-				//if (p_serial->check_for_char ())				// If the user typed a
-				//{											// character, read
-					//char_in = p_serial->getchar ();			// the character
-//
-					//// In this switch statement, we respond to different characters as
-					//// commands typed in by the user
-					//switch (char_in)
-					//{
-						//// The 'n' command asks what time it is right now
-						//case ('n'):
-							//*p_serial << (a_time.set_to_now ()) << endl;
-							//break;
-//
-						//// The 'v' command asks for version and status information
-						//case ('v'):
-							//show_status ();
-							//break;
-//
-						//// The 's' command has all the tasks dump their stacks
-						//case ('s'):
-							//print_task_stacks (p_serial);
-							//break;
-//
-						//// The 'h' command is a plea for help
-						//case ('h'):
-							//print_help_message ();
-							//break;
-//
-						//// The escape key or 'e' key go back to non-command mode
-						//case (27):
-						//case ('e'):
-							//*p_serial << PMS ("Exit command mode") << endl;
-							//transition_to (0);
-							//break;
-//
-						//// If the character isn't recognized, ask: What's That Function?
-						//default:
-							//p_serial->putchar (char_in);
-							//*p_serial << PMS (":WTF?") << endl;
-							//break;
-					//}; // End switch for characters
-				//} // End if a character was received
-//
-				//// In this state, characters from the radio are ignored; hopefully we'll
-				//// get out of this state before the radio buffer overflows and characters
-				//// are missed
-				//
-				//break; // End of state 1
 
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 			// We should never get to the default state. If we do, complain and restart

@@ -18,8 +18,9 @@ class SBG01
 	
 	ADC* adc;
 	float voltage;
+	float voltage_mv;
 	uint8_t bytes_to_read[2];
-	uint16_t read_word;
+	int16_t read_word;
 	float heat_flux;
 	float amplification_ratio;
 	float sensitivity;
@@ -30,7 +31,7 @@ class SBG01
 	
 	void reg_read (void);
 	
-	uint16_t get_voltage_bits (void);
+	int16_t get_voltage_bits (void);
 	
 	float get_voltage_mv (void);
 	

@@ -42,20 +42,14 @@
  */
 extern frt_text_queue print_ser_queue;			// This queue allows tasks to send characters to the user interface task for display.
 
-extern frt_queue<uint16_t> time_queue;
-extern frt_queue<int16_t> ang_queue;
-extern frt_queue<int16_t> A_queue;
-extern frt_queue<int16_t> B_queue;
-extern frt_queue<int16_t> C_queue;
-
-extern frt_queue<uint16_t> xlocations;
-extern frt_queue<uint16_t> ylocations;
-extern frt_queue<uint16_t> zlocations;
+extern frt_queue<uint32_t> xlocations;
+extern frt_queue<uint32_t> ylocations;
+extern frt_queue<uint32_t> zlocations;
 
 extern shared_data<bool> configuration_mode;
 extern shared_data<bool> coordinate_mode;
 extern shared_data<bool> direct_mode;
-extern shared_data<bool> routine_mode;
+extern shared_data<bool> incremental_mode;
 extern shared_data<uint8_t> xmotor_on;
 extern shared_data<uint8_t> ymotor_on;
 extern shared_data<uint8_t> zmotor_on;
@@ -65,8 +59,22 @@ extern shared_data<bool> ymotor_complete;
 extern shared_data<bool> zmotor_complete;
 extern shared_data<bool> sensor_complete;
 extern shared_data<bool> initialization_complete;
-extern shared_data<uint16_t> sensor_delay;
-extern shared_data<uint16_t> microstep_scaler;
+extern shared_data<uint32_t> sensor_delay;
+extern shared_data<uint32_t> microstep_scaler;
 extern shared_data<float> heat_flux;
+extern shared_data<bool> sensor_reading;
+extern shared_data<uint32_t> sensor_sample_number;
+extern shared_data<bool> emergency_shutdown;
+extern shared_data<bool> next_node;
+extern shared_data<uint16_t> current_node;
+extern shared_data<uint16_t> total_nodes;
+extern shared_data<bool> pause;
+extern frt_queue<uint32_t> x_max_velocity;
+extern frt_queue<uint32_t> y_max_velocity;
+extern frt_queue<uint32_t> z_max_velocity;
+extern shared_data<uint32_t> ramp_run_span;
+extern shared_data<bool> reset;
+extern shared_data<bool> drawing_mode;
+extern shared_data<uint32_t> gen_max_v;
 
 #endif // _SHARES_H_

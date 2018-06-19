@@ -26,7 +26,7 @@ class ADC
 	
 	void start_conv (void);
 	
-	uint8_t read (uint16_t* read_sample, uint16_t timeout=1000);
+	uint8_t read (int16_t* read_sample, uint16_t timeout=1000);
 	
 	float get_voltage_ref (void);
 };

@@ -48,6 +48,8 @@
 
 #include "DM542T.h"
 #include "Timer.h"
+#include "InterruptTimer.h"
+#include "LimitSwitch.h"
 
 /// This macro defines a string that identifies the name and version of this program. 
 #define PROGRAM_VERSION		PMS ("ME405 base radio program V0.4 ")
@@ -67,16 +69,24 @@ private:
 protected:
 
     DM542T* md;
+	LimitSwitch* LS_min;
+	LimitSwitch* LS_max;
 	uint32_t travel_time_ms;
-    uint32_t steps;
+    int32_t steps;
 	int32_t step_diff;
-	uint16_t node_number;
-	uint32_t locations[10];
+	uint16_t current_node;
+	frt_queue<uint32_t>* locations;
     float inch_to_step;
+	float step_to_inch;
     uint16_t current_destination;
 	shared_data<bool>* motor_complete;
 	Timer* timer;
-	shared_data<uint8_t>* pmotor_on;
+	shared_data<uint8_t>* motor_operator;
+	bool limit_switch;
+	uint16_t microstep_scaler;
+	int32_t step_destination;
+	bool motor_on;
+	frt_queue<uint32_t>* max_velocity;
 	
 	// This method displays a simple help message telling the user what to do. It's
 	// protected so that only methods of this class or possibly descendents can use it
@@ -88,15 +98,25 @@ protected:
 public:
 
     const char* task_name;
-
-	// This constructor creates a user interface task object
-	task_md (const char*, unsigned portBASE_TYPE, size_t, emstream*, DM542T* c_md,
-	Timer* ctimer, shared_data<uint8_t>* cmotor_on, shared_data<bool>* cmotor_complete,
-	uint16_t cmicrostep_scaler);
+	
+	// This constructor creates a motor driver task object
+	task_md (const char*, unsigned portBASE_TYPE, size_t, emstream*, DM542T* md, LimitSwitch* LS_min, LimitSwitch* LS_max,
+	frt_queue<uint32_t>* locations, frt_queue<uint32_t>* max_velocity, shared_data<uint8_t>* motor_operator, shared_data<bool>* motor_complete,
+	uint16_t microstep_scaler);
 
 	/** This method is called by the RTOS once to run the task loop for ever and ever.
 	 */
 	void run (void);
+	
+	void take_step (void);
+	
+	void set_signal_low (void);
+	
+	void reset_device(void);
+	
+	bool motorOn(void);
+	
+	void motorOff(void);
 };
 
 #endif // _TASK_MD_H_

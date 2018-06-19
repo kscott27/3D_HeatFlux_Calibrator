@@ -30,6 +30,7 @@
 #define _TASK_SENSOR_H_
 
 #include <stdlib.h>                         // Prototype declarations for I/O functions
+#include <math.h>
 
 #include "FreeRTOS.h"                       // Primary header for FreeRTOS
 #include "task.h"                           // Header for FreeRTOS task functions
@@ -69,7 +70,11 @@ protected:
 
     uint8_t node;
 	SBG01* sbg01;
-	//uint16_t tsensor_delay;
+	uint16_t current_node;
+	uint16_t sensor_total_nodes;
+	float sample_sum;
+	
+	uint32_t samples_taken;
 	
 	// This method displays a simple help message telling the user what to do. It's
 	// protected so that only methods of this class or possibly descendents can use it
@@ -88,6 +93,10 @@ public:
 	/** This method is called by the RTOS once to run the task loop for ever and ever.
 	 */
 	void run (void);
+	
+	float get_std_dev(float mean, uint32_t n, float* data);
+	
+	void reset_device(void);
 };
 
 #endif // _TASK_SENSOR_H_

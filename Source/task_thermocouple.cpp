@@ -34,19 +34,18 @@ task_thermocouple::task_thermocouple (const char* a_name,
 					  unsigned portBASE_TYPE a_priority, 
 					  size_t a_stack_size,
 					  emstream* p_ser_dev,
-					  MAX31855* ptherm1
+					  MAX31855* tc
 					 )
-	: frt_task (a_name, a_priority, a_stack_size, p_ser_dev)
+	: frt_task (a_name, a_priority, a_stack_size, p_ser_dev), tc(tc)
 {
 	task_name = a_name;
-	therm1 = ptherm1;
 }
 
 
 //-------------------------------------------------------------------------------------
-/** This task interacts with the user for force him/her to do what he/she is told. It
- *  is just following the modern government model of "This is the land of the free...
- *  free to do exactly what you're told." 
+/** This task interacts with the thermocouple driver in order to monitor the digital 
+ *  readout and relay it to the user interface. It will also cause the device to enter
+ *  an emergency shutdown mode if the temperature exceeds a certain threshold.
  */
 
 void task_thermocouple::run (void)
@@ -68,9 +67,13 @@ void task_thermocouple::run (void)
 			// proceeding to its routine.
 			case (0):
 			    
-				current_temp = therm1->get_temp_fahr();
+				current_temp = tc->get_temp_fahr();
+				//if (current_temp > 120)
+				//{
+					//emergency_shutdown.put(true);
+				//}
 				//*p_serial << task_name << PMS (" Output Temp: ") << current_temp << PMS (" degrees C") << endl;
-				*p_serial << PMS ("m1t") << current_temp << endl;
+				*p_serial << task_name << current_temp << endl;
 			
 			    break;
 			

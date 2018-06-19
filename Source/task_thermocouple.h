@@ -47,7 +47,7 @@ private:
 protected:
 
     uint16_t current_temp;
-	MAX31855* therm1;
+	MAX31855* tc;
 	
 	// This method displays a simple help message telling the user what to do. It's
 	// protected so that only methods of this class or possibly descendents can use it
@@ -61,7 +61,7 @@ public:
     const char* task_name;
 
 	// This constructor creates a user interface task object
-	task_thermocouple (const char*, unsigned portBASE_TYPE, size_t, emstream*, MAX31855* ptherm1);
+	task_thermocouple (const char*, unsigned portBASE_TYPE, size_t, emstream*, MAX31855* tc);
 
 	/** This method is called by the RTOS once to run the task loop for ever and ever.
 	 */

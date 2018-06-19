@@ -20,16 +20,20 @@ ADC::ADC(ADC_t* interface, ADC_CH_t* interface_ch)
 	// Set the enable and flush pipeline bits
 	interface->CTRLA = 1 << 0 | 1 << 1 | 1 << 2;
 	
+	// Set the ADC for Conversion Mode, which allows signed readings. This is necessary
+	// for differential input with gain mode.
+	interface->CTRLB = ADC_IMPMODE_bm | ADC_CONMODE_bm;
+	
 	// Set the single-ended input bit
-	interface->CH0.CTRL = ADC_CH_INPUTMODE0_bm;
+	interface->CH0.CTRL = ADC_CH_GAIN_32X_gc | ADC_CH_INPUTMODE_DIFFWGAIN_gc;
 
-	// Set the reference voltage to be Vcc/1.6
-	interface->REFCTRL = 1 << 6;
+	// Set the reference voltage to be VCC/1.6
+	interface->REFCTRL = ADC_REFSEL_INT1V_gc;
 	
 	// Declare which pins the ADC will be reading
-	interface->CH0.MUXCTRL = ADC_CH_MUXPOS1_bm | ADC_CH_MUXPOS3_bm;
+	interface->CH0.MUXCTRL = ADC_CH_MUXPOS_PIN0_gc | ADC_CH_MUXNEG_PIN4_gc;
 
-	voltage_ref = 3.348 / 1.6;
+	voltage_ref = 1;
 }
 
 //-------------------------------------------------------------------------------------
@@ -46,7 +50,7 @@ void ADC::start_conv (void)
  *  @param timeout Amount of clock cycles before this function will exit without the
      ADC Interrupt flag being raised
  */
-uint8_t ADC::read (uint16_t* read_sample, uint16_t timeout)
+uint8_t ADC::read (int16_t* read_sample, uint16_t timeout)
 {
 	volatile uint16_t counter;
 	counter = timeout;
@@ -57,7 +61,8 @@ uint8_t ADC::read (uint16_t* read_sample, uint16_t timeout)
 		return 0;
 	}
 		
-	*read_sample = interface->CH0.RES;
+	int16_t reg_value = interface->CH0.RES;
+	*read_sample = reg_value;
 	return 1;
 }
 

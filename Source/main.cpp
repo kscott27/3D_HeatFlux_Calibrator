@@ -33,6 +33,7 @@
 #include "shares.h"                         // Global ('extern') queue declarations
 
 #include "Timer.h"
+#include "InterruptTimer.h"
 #include "DM542T.h"
 #include "LimitSwitch.h"
 #include "SPI_Master.h"
@@ -54,14 +55,25 @@ shared_data<bool> zmotor_complete;
 shared_data<bool> motors_ready;
 shared_data<bool> sensor_complete;
 shared_data<float> heat_flux;
+shared_data<bool> sensor_reading;
+shared_data<uint32_t> sensor_sample_number;
 shared_data<bool> initialization_complete;
-shared_data<uint16_t> sensor_delay;
-shared_data<uint16_t> microstep_scaler;
+shared_data<uint32_t> sensor_delay;
+shared_data<uint32_t> microstep_scaler;
+shared_data<bool> emergency_shutdown;
+shared_data<bool> next_node;
+shared_data<uint16_t> current_node;
+shared_data<uint16_t> total_nodes;
+shared_data<bool> pause;
+frt_queue<uint32_t> x_max_velocity(50,NULL,10);
+frt_queue<uint32_t> y_max_velocity(50,NULL,10);
+frt_queue<uint32_t> z_max_velocity(50,NULL,10);
+shared_data<uint32_t> ramp_run_span;
+shared_data<bool> reset;
+shared_data<bool> drawing_mode;
+shared_data<uint32_t> gen_max_v;
 
 uint8_t number_of_nodes;
-//uint32_t x_locs[10];
-//uint32_t y_locs[10];
-//uint32_t z_locs[10];
 
 SPI_Master* spi;
 MAX31855* therm1;
@@ -72,25 +84,36 @@ MAX31855* therm5;
 MAX31855* therm6;
 MAX31855* therm7;
 MAX31855* therm8;
+MAX31855* therm9;
+MAX31855* therm10;
+MAX31855* therm11;
+MAX31855* therm12;
 ADC* adc;
 SBG01* sbg01;
-LimitSwitch* lim_x;
-LimitSwitch* lim_y;
-Timer* timer_C0;
+LimitSwitch* lim_x1;
+LimitSwitch* lim_x2;
+LimitSwitch* lim_y1;
+LimitSwitch* lim_y2;
+LimitSwitch* lim_z1;
+LimitSwitch* lim_z2;
+InterruptTimer* timer_D1_pin4;
+InterruptTimer* timer_D0_pin3;
+InterruptTimer* timer_C0_pin0;
 DM542T* md_x;
 DM542T* md_y;
 DM542T* md_z;
 
 frt_text_queue print_ser_queue (32, NULL, 10);
 
-frt_queue<uint16_t> xlocations(50,NULL,10);
-frt_queue<uint16_t> ylocations(50,NULL,10);
-frt_queue<uint16_t> zlocations(50,NULL,10);
+frt_queue<uint32_t> xlocations(50,NULL,10);
+frt_queue<uint32_t> ylocations(50,NULL,10);
+frt_queue<uint32_t> zlocations(50,NULL,10);
 
 shared_data<bool> configuration_mode;
 shared_data<bool> coordinate_mode;
 shared_data<bool> direct_mode;
 shared_data<bool> routine_mode;
+shared_data<bool> incremental_mode;
 shared_data<uint8_t> xmotor_on;
 shared_data<uint8_t> ymotor_on;
 shared_data<uint8_t> zmotor_on;
@@ -163,57 +186,88 @@ int main (void)
 	rs232 ser_dev(0,&USARTE0); // Create a serial device on USART E0
 	ser_dev << clrscr << "FreeRTOS Xmega Testing Program" << endl << endl;
 		
-	
+	// Initialize certain shared variables
+	sensor_delay.put(2);
+	microstep_scaler.put(8);
+	sensor_sample_number.put(1000);
+	ramp_run_span.put(50);
+	//x_max_velocity.put(7500);
+	//y_max_velocity.put(7500);
+	//z_max_velocity.put(7500);
+	gen_max_v.put(7500);
 	
 	
 	// Create driver objects
 	
 	//spi = new SPI_Master(&SPID);
-	//therm1 = new MAX31855(spi, &PORTC, PIN4_bm);
-	adc = new ADC(&ADCA, &(ADCA.CH0));
-	sbg01 = new SBG01(adc, 0.225);
-	//lim_x = new LimitSwitch (&PORTA, 6);
-	//lim_y = new LimitSwitch (&PORTA, 7);
-	//timer_C0 = new Timer (&PORTC, &TCC0, PIN4_bm);
-	//timer_C0->set_freq_khz(5);
-	//md_x = new DM542T (timer_C0, &PORTA, PIN1_bm, PIN0_bm, 8);
-	//md_y = new DM542T (timer_C0, &PORTA, PIN3_bm, PIN2_bm, 8);
-	//md_z = new DM542T (timer_C0, &PORTA, PIN5_bm, PIN4_bm, 8);
-	
-	
-	
+	//therm1 = new MAX31855(spi, &PORTC, PIN1_bm);
+	//therm2 = new MAX31855(spi, &PORTC, PIN2_bm);
+	//therm3 = new MAX31855(spi, &PORTC, PIN3_bm);
+	//therm4 = new MAX31855(spi, &PORTC, PIN4_bm);
+	//therm5 = new MAX31855(spi, &PORTC, PIN5_bm);
+	//therm6 = new MAX31855(spi, &PORTC, PIN6_bm);
+	//therm7 = new MAX31855(spi, &PORTC, PIN7_bm);
+	//therm8 = new MAX31855(spi, &PORTD, PIN0_bm);
+	//therm9 = new MAX31855(spi, &PORTD, PIN1_bm);
+	//therm10 = new MAX31855(spi, &PORTD, PIN2_bm);
+	//therm11 = new MAX31855(spi, &PORTC, PIN4_bm);
+	//therm12 = new MAX31855(spi, &PORTC, PIN5_bm);
+	adc = new ADC(&ADCB, &(ADCB.CH0));
+	sbg01 = new SBG01(adc, 6.28930818);
+	timer_D1_pin4 = new InterruptTimer (&PORTD, &TCD1, PIN4_bm, TC_CCAINTLVL_HI_gc);
+	timer_D0_pin3 = new InterruptTimer (&PORTD, &TCD0, PIN3_bm, TC_CCDINTLVL_HI_gc);
+	timer_C0_pin0 = new InterruptTimer (&PORTC, &TCC0, PIN0_bm, TC_CCAINTLVL_HI_gc);
+	md_x = new DM542T (timer_D1_pin4, &PORTA, PIN2_bm, PIN3_bm, 8);
+	md_y = new DM542T (timer_D0_pin3, &PORTA, PIN4_bm, PIN5_bm, 8);
+	md_z = new DM542T (timer_C0_pin0, &PORTA, PIN6_bm, PIN7_bm, 8);
+	lim_x1 = new LimitSwitch (md_x, &PORTA, PIN0_bm, 0, 0, EVSYS_CHMUX_PORTA_PIN0_gc);
+	lim_x2 = new LimitSwitch (md_x, &PORTA, PIN1_bm, 0, 1, EVSYS_CHMUX_PORTA_PIN1_gc);
+	lim_y1 = new LimitSwitch (md_y, &PORTE, PIN5_bm, 0, 0, EVSYS_CHMUX_PORTE_PIN5_gc);
+	lim_y2 = new LimitSwitch (md_y, &PORTE, PIN4_bm, 0, 1, EVSYS_CHMUX_PORTE_PIN4_gc);
+	lim_z1 = new LimitSwitch (md_z, &PORTF, PIN1_bm, 0, 0, EVSYS_CHMUX_PORTF_PIN1_gc);
+	lim_z2 = new LimitSwitch (md_z, &PORTF, PIN2_bm, 0, 1, EVSYS_CHMUX_PORTF_PIN2_gc);
 	
 	
 	// The user interface is at low priority; it could have been run in the idle task
 	// but it is desired to exercise the RTOS more thoroughly in this test program
 	new task_user ("UserInt", task_priority (0), 128, &ser_dev);
 	
-	//new task_md ("MDX", task_priority(8), 128, &ser_dev, md_x, timer_C0,
-	//&xmotor_on, &xmotor_complete, 8);
-	//
-	//new task_md ("MDY", task_priority(8), 128, &ser_dev, md_y, timer_C0,
-	//&ymotor_on, &ymotor_complete, 8);
-	//
-	//new task_md ("MDZ", task_priority(8), 128, &ser_dev, md_z, timer_C0,
-	//&zmotor_on, &zmotor_complete, 8);
+	new task_md ("MDX", task_priority(8), 128, &ser_dev, md_x, lim_x1, lim_x2, &xlocations,
+	&x_max_velocity, &xmotor_on, &xmotor_complete, 8);
 	
-	new task_sensor ("Gardon_Gauge", task_priority(9), 128, &ser_dev, sbg01);
+	new task_md ("MDY", task_priority(8), 128, &ser_dev, md_y, lim_y1, lim_y2, &ylocations,
+	&y_max_velocity, &ymotor_on, &ymotor_complete, 8);
+	
+	new task_md ("MDZ", task_priority(8), 128, &ser_dev, md_z, lim_z1, lim_z2, &zlocations,
+	&z_max_velocity, &zmotor_on, &zmotor_complete, 8);
+	
+	new task_sensor ("Gardon_Gauge", task_priority(9), 4500, &ser_dev, sbg01);
 
-    //new task_thermocouple ("Therm1", task_priority(6), 128, &ser_dev, therm1);
-
-    //new task_thermocouple ("Therm2", task_priority(6), 260, &ser_dev);
+    //new task_thermocouple ("Therm1", task_priority(6), 128, &ser_dev, therm10);
 //
-	//new task_thermocouple ("Therm3", task_priority(6), 260, &ser_dev);
+    //new task_thermocouple ("Therm2", task_priority(6), 128, &ser_dev, therm2);
 //
-	//new task_thermocouple ("Therm4", task_priority(6), 260, &ser_dev);
+    //new task_thermocouple ("Therm3", task_priority(6), 128, &ser_dev, therm3);
 //
-	//new task_thermocouple ("Therm5", task_priority(6), 260, &ser_dev);
+    //new task_thermocouple ("Therm4", task_priority(6), 128, &ser_dev, therm4);
+//
+    //new task_thermocouple ("Therm5", task_priority(6), 128, &ser_dev, therm5);
+//
+    //new task_thermocouple ("Therm6", task_priority(6), 128, &ser_dev, therm6);
+//
+    //new task_thermocouple ("Therm7", task_priority(6), 128, &ser_dev, therm7);
+    //
+    //new task_thermocouple ("Therm8", task_priority(6), 128, &ser_dev, therm8);
+	////
+	//new task_thermocouple ("Therm9", task_priority(6), 128, &ser_dev, therm9);
+	//
+	//new task_thermocouple ("Therm10", task_priority(6), 128, &ser_dev, therm10);
 	
 	// Enable high level interrupts and global interrupts
 	PMIC_CTRL = (1 << PMIC_HILVLEN_bp | 1 << PMIC_MEDLVLEN_bp | 1 << PMIC_LOLVLEN_bp);
 	sei();
 
-    initialization_complete.put(false);
+    //initialization_complete.put(false);
 	
 	// Here's where the RTOS scheduler is started up. It should never exit as long as
 	// power is on and the microcontroller isn't rebooted
@@ -222,10 +276,84 @@ int main (void)
 
 ISR(PORTA_INT0_vect)
 {
-	md_x->motorOff();
+	md_x->min_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_x->get_direction() == 1)
+	{
+		reset.ISR_put(true);
+	}
 }
 
 ISR(PORTA_INT1_vect)
 {
-	md_y->motorOff();
+	md_x->max_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_x->get_direction() == 0)
+	{
+		reset.ISR_put(true);
+	}
+}
+
+ISR(PORTE_INT0_vect)
+{
+	md_y->min_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_y->get_direction() == 1)
+	{
+		reset.ISR_put(true);
+	}
+}
+
+ISR(PORTE_INT1_vect)
+{
+	md_y->max_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_y->get_direction() == 0)
+	{
+		reset.ISR_put(true);
+	}
+}
+
+ISR(PORTF_INT0_vect)
+{
+	md_z->min_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_z->get_direction() == 1)
+	{
+		reset.ISR_put(true);
+	}
+}
+
+ISR(PORTF_INT1_vect)
+{
+	md_z->max_bound_interrupt_handler();
+	if (coordinate_mode.ISR_get() && md_z->get_direction() == 0)
+	{
+		reset.ISR_put(true);
+	}
+}
+
+ISR(TCD1_CCA_vect)
+{
+	md_x->set_signal_low();
+}
+
+ISR(TCD1_OVF_vect)
+{
+	md_x->take_step();
+}
+
+ISR(TCD0_CCD_vect)
+{
+	md_y->set_signal_low();
+}
+
+ISR(TCD0_OVF_vect)
+{
+	md_y->take_step();
+}
+
+ISR(TCC0_CCA_vect)
+{
+	md_z->set_signal_low();
+}
+
+ISR(TCC0_OVF_vect)
+{
+	md_z->take_step();
 }

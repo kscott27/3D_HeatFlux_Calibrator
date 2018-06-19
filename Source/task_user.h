@@ -66,10 +66,14 @@ protected:
 
 	char atoi_buf[256];
 	uint8_t atoi_index;
-	uint16_t conv_int;
-    frt_queue<uint16_t>* location_queue;
-	shared_data<uint16_t>* data_config;
+	uint32_t conv_int;
+    frt_queue<uint32_t>* location_queue;
+	shared_data<uint32_t>* data_config;
+	frt_queue<uint32_t>* v_config;
 	shared_data<uint8_t>* pmotor_operator;
+	bool user_coordinate_mode;
+	const char* task_name;
+	bool queue_indicator;
 
 
 	// This method displays a simple help message telling the user what to do. It's
@@ -81,7 +85,7 @@ protected:
 	
 	// This method allows the interface to receive bytes over serial and convert them
 	// into multiple digit numbers.
-	uint16_t str_to_int(void);
+	uint32_t str_to_int(void);
 	
 	// This method prints the main menu on the home screen.
 	void print_main_menu(void);

@@ -1,6 +1,6 @@
 //**************************************************************************************
 /** \file task_sensor.cpp
- *    This file contains source code for a user interface task for a ME405/FreeRTOS
+ *    This file contains source code for a heat flux gauge task for a ME405/FreeRTOS
  *    test suite. 
  *
  *  Revisions:
@@ -58,17 +58,13 @@ task_sensor::task_sensor (const char* a_name,
 					 )
 	: frt_task (a_name, a_priority, a_stack_size, p_ser_dev), sbg01(sbg01)
 {
-	task_name = a_name;
-	sensor_delay.put(3000);
-    node = 0;
-	
+	task_name = a_name;	
 }
 
 
 //-------------------------------------------------------------------------------------
-/** This task interacts with the user for force him/her to do what he/she is told. It
- *  is just following the modern government model of "This is the land of the free...
- *  free to do exactly what you're told." 
+/** This task interacts with the heat flux sensor in order to capture readings and relay
+ *  that data to the user interface task.
  */
 
 void task_sensor::run (void)
@@ -76,8 +72,10 @@ void task_sensor::run (void)
 	char char_in;                           // Character read from serial device
 	time_stamp a_time;                      // Holds the time so it can be displayed
 	portTickType previous_ticks;
+	//float sensor_readings[sensor_sample_number.get()];
+	samples_taken = 0;
+	sample_sum = 0;
 	sensor_complete.put(false);
-	transition_to(2);
 	
 
 	// This is an infinite loop; it runs until the power is turned off. There is one 
@@ -88,58 +86,140 @@ void task_sensor::run (void)
 		switch (state)
 		{
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-			// In state 0, the motor task is waiting for the user to enter data before 
-			// proceeding to its routine.
+			// In state 0, the sensor task is waiting for the device to enter a certain mode.
 			case (0):
-			    //*p_serial << task_name << PMS ("S0") << endl;
-			
-			    if(initialization_complete.get())
+		
+				//*p_serial << sbg01->get_voltage_mv() <<  endl;
+				if (sensor_reading.get())
 				{
-					*p_serial << PMS ("Sensor initialized.") << endl;
+					sample_sum = 0;
+					samples_taken = 0;
+					transition_to(3);
+				}
+				else if(coordinate_mode.get() || incremental_mode.get())
+				{
+					sample_sum = 0;
+					samples_taken = 0;
+					current_node = 0;
 					transition_to(1);
 				}
 			
-			    break;
+			    break;			
+
+			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+			// In state 1, the device is in coordinate mode, so the sensor will only take readings
+			// after the set delay time has elapsed while the sensor is in the proper position.
+			case (1):
 			
+			if(xmotor_complete.get() && ymotor_complete.get() && zmotor_complete.get())
+			{
+				if (incremental_mode.get())
+				{
+					incremental_mode.put(false);
+					next_node.put(true);
+					sensor_reading.put(false);
+					xmotor_complete.put(false);
+					ymotor_complete.put(false);
+					zmotor_complete.put(false);
+					transition_to(0);
+				}
+				else if (drawing_mode.get())
+				{
+					next_node.put(true);
+					sensor_reading.put(false);
+					xmotor_complete.put(false);
+					ymotor_complete.put(false);
+					zmotor_complete.put(false);
+				}
+				else
+				{
+					sensor_reading.put(true);
+					*p_serial <<  PMS ("Sensor Reading ") << ++current_node << " (Delay = " << sensor_delay.get() << " ms)" << endl;
+					node++;
+					previous_ticks = xTaskGetTickCount();
+					delay_from_to_ms(previous_ticks, sensor_delay.get());
+					transition_to(2);
+				}	
+			}
+			//if (!coordinate_mode.get())
+			//{
+				//transition_to(0);
+			//}
+			
+			break;
 			
 			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-			// In state 1, the motor is powered CW in order to zero it at the origin in 
-			// in conjunction with a limit switch.
-			case (1):
-				
-				if(xmotor_complete.get() && ymotor_complete.get() && zmotor_complete.get())
+			// In state 3, the device has waited for the heat flux gage to get a steady reading, and will
+			// now take a number of samples to be averaged and then sent back to the interface.
+			case (2):
+									
+			if(samples_taken < sensor_sample_number.get())
+			{
+				//sensor_readings[samples_taken] = sbg01->get_voltage_mv();
+				sample_sum += sbg01->get_voltage_mv();
+				samples_taken++;
+			}
+			else
+			{
+				heat_flux.put(sample_sum/sensor_sample_number.get());
+				*p_serial << PMS ("HF:") << heat_flux.get()*6.289 << endl;
+				*p_serial << PMS ("mV:") << heat_flux.get() << endl;
+				//*p_serial << PMS ("Sample std dev: ") << get_std_dev(heat_flux.get(), sensor_sample_number.get(), sensor_readings) << endl;
+				sample_sum = 0;
+				samples_taken = 0;
+				if (current_node < total_nodes.get())
 				{
-                    *p_serial <<  "Sensor Reading " << node+1 << " (Delay = " << sensor_delay.get() << " ms)" << endl;
-					transition_to(2);
+					next_node.put(true);
+					sensor_reading.put(false);
+					xmotor_complete.put(false);
+					ymotor_complete.put(false);
+					zmotor_complete.put(false);
+					transition_to(1);
+				}
+				else
+				{
+					*p_serial << PMS ("Routine complete.") << endl;	
+					transition_to(0);
+					coordinate_mode.put(false);
+					*p_serial << PMS ("C") << endl;
+					next_node.put(false);
+					sensor_reading.put(false);
+					xmotor_complete.put(false);
+					ymotor_complete.put(false);
+					zmotor_complete.put(false);
+					//previous_ticks = xTaskGetTickCount();
+					//delay_from_to_ms(previous_ticks, 3000);
+					//reset_device();
 				}
 				
-				break;
-				
-
-			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-			// In state 2, the motor is returning to the origin and waiting for the limit 
-			// switch to power it off.
-			case (2):
-				
-				//tsensor_delay = sensor_delay.get();
-				//previous_ticks = xTaskGetTickCount();
-				//delay_from_to_ms(previous_ticks, sensor_delay.get());
-				
-				//heat_flux.put(sbg01->get_heat_flux());
-				//heat_flux.put(sbg01->get_voltage_bits());
-				
-				//sensor_complete.put(true);
-				//xmotor_complete.put(false);
-				//ymotor_complete.put(false);
-				//zmotor_complete.put(false);
-
-				*p_serial << PMS ("Sensor Reading: ")  << sbg01->get_voltage() << PMS (" kW/m^2") <<  endl;
-                //*p_serial << PMS ("Sensor Reading: ")  << heat_flux.get() << PMS (" kW/m^2") <<  endl;
-				//node++;
-				//transition_to(1);
-				
-				break; // End of state 1
+			}
 			
+			break;
+			
+			// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+			// In state 4, the interface has requested a sensor reading. The ADC will sample
+			// a set number of readings and then take the average and send the result back
+			// over serial.
+			case (3):
+			
+			if(samples_taken < sensor_sample_number.get())
+			{
+				sample_sum += sbg01->get_voltage_mv();
+				samples_taken++;
+			}
+			else
+			{
+				heat_flux.put(sample_sum/sensor_sample_number.get());
+				*p_serial << PMS ("HF:") << heat_flux.get()*6.289 << endl;
+				*p_serial << PMS ("mV:") << heat_flux.get() << endl;
+				//*p_serial << PMS ("Sample std dev: ") << get_std_dev(heat_flux.get(), sensor_sample_number.get(), sensor_readings) << endl;
+				sample_sum = 0;
+				samples_taken = 0;
+				sensor_reading.put(false);
+				transition_to(0);
+			}
+			
+			break;
 
 		} // End switch state
 
@@ -147,6 +227,25 @@ void task_sensor::run (void)
 
 		// No matter the state, wait for approximately a millisecond before we 
 		// run the loop again. This gives lower priority tasks a chance to run
-		vTaskDelay (configMS_TO_TICKS (1000));
+		vTaskDelay (configMS_TO_TICKS (1));
 	}
+}
+
+float task_sensor::get_std_dev(float mean, uint32_t n, float* data)
+{
+	float variance = 0;
+	float std_dev = 0;
+	for (uint16_t i=0; i<n; i++)
+	{
+		variance += pow((data[i] - mean), 2);
+	}
+	std_dev = pow((variance / (n - 1)), 0.5);
+	return std_dev;
+}
+
+void task_sensor::reset_device(void)
+{
+	*p_serial << PMS ("Resetting device.") << endl;
+	wdt_enable (WDTO_120MS);
+	for (;;);
 }

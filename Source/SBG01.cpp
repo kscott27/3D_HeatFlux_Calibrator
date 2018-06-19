@@ -16,7 +16,8 @@
 SBG01::SBG01(ADC* adc, float sensitivity)
       :adc(adc), sensitivity(sensitivity)
 {
-	amplification_ratio = 67.1;
+	amplification_ratio = 32;
+	//amplification_ratio = 64;
 }
 
 //-------------------------------------------------------------------------------------
@@ -34,17 +35,17 @@ void SBG01::reg_read (void)
 float SBG01::get_voltage (void)
 {
 	reg_read();
-	uint16_t voltage_bits = read_word;
+	int16_t voltage_bits = read_word;
 	float voltage_ref = adc->get_voltage_ref();
-	voltage = voltage_bits * voltage_ref / (4096 * amplification_ratio);
-	
+	voltage = voltage_bits * voltage_ref / (2048 * amplification_ratio);
+	//voltage = voltage * 1.75 + 8.72;
 	return voltage;
 }
 
 //-------------------------------------------------------------------------------------
 /** This method returns the result of reg_read
  */
-uint16_t SBG01::get_voltage_bits (void)
+int16_t SBG01::get_voltage_bits (void)
 {
 	reg_read();
 	return read_word;
@@ -56,7 +57,9 @@ uint16_t SBG01::get_voltage_bits (void)
 float SBG01::get_voltage_mv (void)
 {
 	get_voltage();
-	return voltage*1000;
+	voltage_mv = voltage * 1000;
+	voltage_mv = voltage_mv * 1.86 + 7.05;
+	return voltage_mv;
 }
 
 //-------------------------------------------------------------------------------------
@@ -64,8 +67,8 @@ float SBG01::get_voltage_mv (void)
  */
 float SBG01::get_heat_flux(void)
 {
-	voltage = get_voltage();
+	get_voltage_mv();
 	
-	heat_flux = voltage / sensitivity;
+	heat_flux = voltage_mv * sensitivity;
 	return heat_flux;
 }

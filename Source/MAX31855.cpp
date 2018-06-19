@@ -16,7 +16,7 @@ MAX31855::MAX31855(SPI_Master* SPIM, PORT_t* cs_port, uint8_t cs_pin_bm)
          :SPIM(SPIM),cs_port(cs_port),cs_pin_bm(cs_pin_bm)
 {
 	cs_port->DIRSET = cs_pin_bm;
-	cs_port->OUTSET = cs_pin_bm;
+	cs_port->OUTCLR = cs_pin_bm;
 };
 
 void MAX31855::reg_write(uint8_t reg_address, uint8_t reg_data)
